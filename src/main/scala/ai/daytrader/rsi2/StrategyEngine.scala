@@ -44,54 +44,92 @@ object StrategyEngine{
     "ADP", "ADSK", "ATVI", "AVGO", "CSCO", "CTXS", "EA", "EXPE", "INFY", "ORCL", "QCOM", "NXPI"
   )
 
+  val watchListIds = List(
+    ("FB",2067121),
+    ("BABA",7422546),
+    ("GOOG",11419765),
+    ("AAPL",8049),
+    ("TSLA",38526),
+    ("MSFT",27426),
+    ("NVDA",29814),
+    ("AMZN",7410),
+    ("CRM",35327),
+    ("GOOGL",11419766),
+    ("ADBE",6635),
+    ("NFLX",28768),
+    ("INTC",23205),
+    ("BIDU",9090),
+    ("ADP",8689),
+    ("ADSK",8674),
+    ("ATVI",6543),
+    ("AVGO",21109371),
+    ("CSCO",13648),
+    ("CTXS",13790),
+    ("EA",17173),
+    ("EXPE",1484558),
+    ("INFY",23023),
+    ("ORCL",30678),
+    ("QCOM",33237),
+    ("NXPI",46411))
+
   val decider: Supervision.Decider = {
     case _ => Supervision.Resume
   }
   implicit val system: ActorSystem = ActorSystem()
   implicit val materializer = ActorMaterializer(ActorMaterializerSettings(system).withSupervisionStrategy(decider))
 
-  val api = new AlphaVantageApi(API_KEY)
+  //val api = new AlphaVantageApi(API_KEY)
 
-  def reportRsi2( symbols: List[String] =  watchList ): Future[List[Log]] = {
+  val token = System.getenv("WARPONY_TOKEN")
+  val tokenProvider =
+    if(token == "")None
+    else Some( () => Future.successful(Questrade.Login(
+      access_token = "",
+      token_type = "",
+      expires_in = 900,
+      refresh_token = token,
+      api_server = "https://api03.iq.questrade.com/"
+    ) ) )
+
+  val api = new QuestradeApi(false, tokenProvider = tokenProvider)
+
+  def reportRsi2( symbols: List[(String, Int)] =  watchListIds ): Future[List[Log]] = {
     val STRATEGY = "RSI2"
     // TODO: veiry this is the correct time to call this
-    Future.sequence(symbols.map{ symbol =>
+    Future.sequence(symbols.map{ sym =>
       (for{
-        prices <- api.daily(symbol)
-        sma200s <- api.sma(symbol, AlphaVantage.Interval.daily, 200)
-        rsi2s <- api.rsi(symbol, AlphaVantage.Interval.daily, 2)
+        prices <- api.candles(sym._2, DateTime.now.minusDays(30), DateTime.now, Questrade.Interval.OneHour )
       }yield {
-        val last100Price =  prices.`Time Series`.series.map(_._2.`4. close`.toDouble)
-        val price = last100Price.head
+        val closePrices =  prices.candles.map(_.close).reverse
+        val price = closePrices.head
         // TODO: verify this is the correct day?
-        val sma200 = sma200s.`Technical Analysis: SMA`.sma.head._2.SMA.toDouble
-        val last5Days = last100Price.take(5)
-        val sma5 = last5Days.sum / 5.0
+        val last200 = closePrices.take(200)
+        val sma200 = last200.sum / 200.0
+        val last5 = closePrices.take(5)
+        val sma5 = last5.sum / 5.0
         // calculate the new RSI
-        // TODO: check if RSI daily gives you current day.. i suspect it does not
-        val rsi2 = rsi2s.`Technical Analysis: RSI`.rsi.head._2.RSI.toDouble
-        println(s"RSI: ${rsi2s.`Technical Analysis: RSI`.rsi.head}")
+        val rsi2 = calculateRsi(closePrices, 2)
+        //println(s"RSI: ${rsi2s.`Technical Analysis: RSI`.rsi.head}")
 
         // debug...
-        println(s"price: ${price}")
+        /*println(s"price: ${price}")
         println(s"sma200: ${sma200}")
         println(s"sma5: ${sma5}")
-        println(s"rsi2: ${rsi2}")
-        println(s"MY RSI: ${calculateRsi(last100Price, 2)}")
+        println(s"MY RSI: ${calculateRsi(closePrices, 2)}")*/
 
         // first check if price > sma200
         if(price > sma200){
           // next we check if price is < then sma 5
           if( price < sma5){
             // now we check if the rsi2 is less then 10.0
-            if(rsi2 < 10.0)BuyTrigger(symbol, price, DateTime.now, STRATEGY)
-            else Quote(symbol, price, DateTime.now)
-          }else SellTrigger(symbol, price, DateTime.now, STRATEGY)
-        }else Quote(symbol, price, DateTime.now)
+            if(rsi2 < 10.0)BuyTrigger(sym._1, price, DateTime.now, STRATEGY)
+            else Quote(sym._1, price, DateTime.now)
+          }else SellTrigger(sym._1, price, DateTime.now, STRATEGY)
+        }else Quote(sym._1, price, DateTime.now)
       }).recover{
         case t: Throwable =>
           t.printStackTrace()
-          Error(symbol, 0.0, DateTime.now)
+          Error(sym._1, 0.0, DateTime.now)
       }
     })
   }
@@ -116,7 +154,6 @@ object StrategyEngine{
       val downAvr = (lossAvr*(interval-1.0)+d)/interval
       (upAvr, downAvr, price)
     }
-
     // RSI ..
     100.0 * (up / (up+down))
   }

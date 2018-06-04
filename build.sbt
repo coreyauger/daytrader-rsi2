@@ -19,9 +19,10 @@ libraryDependencies ++= Seq(
   "com.typesafe.akka"       %% "akka-actor"                 % akkaV,
   "com.typesafe.akka"       %% "akka-stream"                % akkaV,
   "com.typesafe.akka"       %% "akka-http"                  % "10.0.9",
-  "io.surfkit" %% "alphavantage-scala" % "0.0.1-SNAPSHOT",
+  "io.surfkit" %% "war-pony" % "0.0.1-SNAPSHOT",
   "com.amazonaws" % "aws-lambda-java-events" % "1.1.0",
-  "com.amazonaws" % "aws-lambda-java-core" % "1.1.0"
+  "com.amazonaws" % "aws-lambda-java-core" % "1.1.0",
+  "jp.co.bizreach" %% "aws-dynamodb-scala" % "0.0.7"
 )
 
 scalacOptions ++= Seq(
