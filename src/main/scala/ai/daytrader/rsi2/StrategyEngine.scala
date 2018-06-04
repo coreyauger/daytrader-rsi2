@@ -81,17 +81,15 @@ object StrategyEngine{
   //val api = new AlphaVantageApi(API_KEY)
 
   val token = System.getenv("WARPONY_TOKEN")
-  val tokenProvider =
-    if(token == "")None
-    else Some( () => Future.successful(Questrade.Login(
-      access_token = "",
-      token_type = "",
-      expires_in = 900,
-      refresh_token = token,
-      api_server = "https://api03.iq.questrade.com/"
-    ) ) )
+  val manualToken =
+    if(token == null)None
+    else Some(token)
 
-  val api = new QuestradeApi(false, tokenProvider = tokenProvider)
+
+  println(s"token: ${token}")
+  println(s"manualToken: ${manualToken}")
+
+  val api = new QuestradeApi(false, manualToken = manualToken)
 
   def reportRsi2( symbols: List[(String, Int)] =  watchListIds ): Future[List[Log]] = {
     val STRATEGY = "RSI2"
